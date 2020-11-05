@@ -430,6 +430,11 @@ input_boolean:
     name: Low Batteries
     icon: mdi:battery-alert
 
+  show_unavailable_batteries:
+    name: Show Unavailable Batteries
+    icon: mdi:battery-alert
+    initial: false
+
 ################################################
 ## Input Number
 ################################################
@@ -493,10 +498,15 @@ automation:
       value_template: &low_battery_check >
         {% macro battery_level() %}
         {% for entity_id in states.group.battery_status.attributes.entity_id if (
-            not (
+          {% if ( states.input_boolean.show_unavailable_batteries.state == true ) %}
+             {{ not (
                   is_state_attr(entity_id, 'battery_alert_disabled', true)
                   or is_state_attr(entity_id, 'restored', true)
                 )
+             }}
+          {% else %}
+              {{ not is_state_attr(entity_id, 'battery_alert_disabled', true) }}
+          {% endif %}
           and states(entity_id) is not none
           and (
             (
