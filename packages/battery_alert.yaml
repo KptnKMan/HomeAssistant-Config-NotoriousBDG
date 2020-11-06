@@ -496,37 +496,24 @@ automation:
   action:
     - condition: template
       value_template: &low_battery_check >
-        {% macro battery_level() %}
-        {% for entity_id in states.group.battery_status.attributes.entity_id if (
-          {% if ( states.input_boolean.show_unavailable_batteries.state == true ) %}
-             {{ not (
-                  is_state_attr(entity_id, 'battery_alert_disabled', true)
-                  or is_state_attr(entity_id, 'restored', true)
-                )
-             }}
-          {% else %}
-              {{ not is_state_attr(entity_id, 'battery_alert_disabled', true) }}
-          {% endif %}
-          and states(entity_id) is not none
-          and (
-            (
-              (
-                states(entity_id) is number
-                or states(entity_id) | length == states(entity_id)| int | string | length
-                or states(entity_id) | length == states(entity_id)| float | string | length
-              )
-              and states(entity_id) | int < states.input_number.battery_alert_threshold_max.state | int
-              and states(entity_id) | int > states.input_number.battery_alert_threshold_min.state | int
-            )
-            or states(entity_id) | lower == 'low'
-            or states(entity_id) | lower == 'unknown'
-            or states(entity_id) | lower == 'unavailable'
-          )
-        ) -%}
-          {{ state_attr(entity_id, "friendly_name") }} ({{ states(entity_id) }})
-        {% endfor -%}
-        {% endmacro %}
-        {{ battery_level() | trim != "" }}
+        {%- set show_unavailable = is_states('input_boolean.show_unavailable_batteries', 'on') %}
+        {%- set high = states('input_number.battery_alert_threshold_max') | float %}
+        {%- set low = states('input_number.battery_alert_threshold_min') | float %}
+        {%- set ns = namespace(results=[]) %}
+        {%- for s in expand('group.battery_status') %}
+          {%- if s.state in ['unknown', 'unavailable'] and show_unavailable and not (s.attributes.battery_alert_disabled or s.attributes.restored) %}
+            {%- ns.results = ns.results + [  s.name ~ ' ' ~ s.state ] %}
+          {%- else %}
+            {%- if s.state.lower() in ['low', 'medium', 'high'] %}
+              {%- if s.state.lower() == 'low' %}
+                {%- ns.results = ns.entites + [ s.name ~ ' ' ~ s.state ] %}
+              {%- endif %}
+            {%- elif low <  s.state | float < high %}
+              {%- ns.results = ns.entites + [ s.name ~ ' ' ~ s.state ] %}
+            {%- endif %}
+          {%- endif %}
+        {%- endfor %}
+        {{ ns.results | join(', ') }}
     - service: input_boolean.turn_on
       data:
         entity_id: input_boolean.low_batteries
